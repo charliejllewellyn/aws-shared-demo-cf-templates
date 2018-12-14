@@ -1,67 +1,11 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
-Description: "This cloudformation stack uses nested templates to deploy a cloud enviroment that can be used to mimic a customers on prem enviroment.
-This can then be used to demonstrate how AWS services can integrate with on premise enviroments such as creating an VPN to connect the two or extending an existing Active Directory into AWS."
+Description: "This cloudformation stack uses nested templates to deploy a cloud enviroment that can be used to mimic a customers on prem enviroment.  This can then be used to demonstrate how AWS services can integrate with on premise enviroments such as creating an VPN to connect the two or extending an existing Active Directory into AWS."
 
 Resources:
-  SharedServicesStack:
+  vpc:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3-eu-west-1.amazonaws.com/transitgw-stack-config/sharedservices.template
-      Parameters:
-        POCRole: !Ref SSMInstanceProfile  
-  DevelopmentStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: https://s3-eu-west-1.amazonaws.com/transitgw-stack-config/development.template
+      TemplateURL: https://s3-eu-west-1.amazonaws.com/onprem-cf/vpc_template.yaml
       Parameters:
         POCRole: !Ref SSMInstanceProfile
-  ProductionStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: https://s3-eu-west-1.amazonaws.com/transitgw-stack-config/production.template
-      Parameters:
-        POCRole: !Ref SSMInstanceProfile
-  TransitGWStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: https://s3-eu-west-1.amazonaws.com/transitgw-stack-config/transitGW.template
-      Parameters:
-        SSTranSubAZ1: !GetAtt SharedServicesStack.Outputs.SSTranSubAZ1
-        SSTranSubAZ2: !GetAtt SharedServicesStack.Outputs.SSTranSubAZ2
-        SSVPC: !GetAtt SharedServicesStack.Outputs.SSVPC
-        DevTranSubAZ1: !GetAtt DevelopmentStack.Outputs.DevTranSubAZ1
-        DevTranSubAZ2: !GetAtt DevelopmentStack.Outputs.DevTranSubAZ2
-        DevVPC: !GetAtt DevelopmentStack.Outputs.DevVPC
-        ProdTranSubAZ1: !GetAtt ProductionStack.Outputs.ProdTranSubAZ1
-        ProdTranSubAZ2: !GetAtt ProductionStack.Outputs.ProdTranSubAZ2
-        ProdVPC: !GetAtt ProductionStack.Outputs.ProdVPC
-        SSTranRTAZ1: !GetAtt SharedServicesStack.Outputs.SSTranRTAZ1
-        SSTranRTAZ2: !GetAtt SharedServicesStack.Outputs.SSTranRTAZ2
-   
-  SSMRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - ec2.amazonaws.com
-            - ssm.amazonaws.com
-          Action:
-          - sts:AssumeRole
-      ManagedPolicyArns:
-      - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
-      - arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole
-  SSMInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Path: "/"
-      Roles:
-      - Ref: SSMRole
-
-Outputs:
-  EC2Role:
-    Value: !Ref SSMRole
