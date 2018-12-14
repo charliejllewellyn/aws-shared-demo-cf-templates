@@ -22,7 +22,11 @@ In order to use this template you must have:
 
 * An AWS Account
 * An IAM key pair that can be used to connect to the Windows Server
+* An S3 Bucket to store the Template Files in.  This bucket must be readable by the person deploying the template.
 
 ---
 ## Instructions
+
+1. Create an S3 Bucket for the template files.  Once the bucket is created upload all of the template files to it.
+2. Within the cloudformation console click create stack and complete the required parameters
 ---
