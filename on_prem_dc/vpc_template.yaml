@@ -1,0 +1,239 @@
+Description:
+
+  Single AZ_VPC_Deployment_v1
+
+  This template deploys a single VPC, with a public and private subnets in a single Availability Zone.
+  It deploys an Internet Gateway, with a default route on the public subnet.
+  It deploys a NAT Gateway , and default routes to them in the private subnet.
+
+  Pre-Req's
+  Prior to deployment you should select the desired region in the console.
+  You must have at least 1 key pair created to select during the stack deployment.
+
+Parameters:
+
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+
+  VpcCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 172.21.0.0/16
+
+  PublicSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 172.21.11.0/24
+
+  PrivateSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
+    Type: String
+    Default: 172.21.101.0/24
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName} On Prem'
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} IGW
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref PublicSubnet1CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub Pub_Subnet_${EnvironmentName}
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub Priv_Subnet_${EnvironmentName}
+
+  NatGateway1EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}_NatGW
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub PublicRoutes_${EnvironmentName}
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub PrivRoutes_${EnvironmentName}
+
+  DefaultPrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      SubnetId: !Ref PrivateSubnet1
+
+  PublicSubnetSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "Public_Subnet_SG"
+      GroupDescription: "Security group for the public subnet"
+      VpcId: !Ref VPC
+
+  PrivateSubnetSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "Private_Subnet_SG"
+      GroupDescription: "Security group for the private subnet"
+      VpcId: !Ref VPC
+
+  PublicSubnetRemoteAccessRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow remote access to windows server
+      IpProtocol: tcp
+      CidrIp: 0.0.0.0/0
+      FromPort: 3389
+      ToPort: 3389
+      GroupId:
+        !GetAtt
+        - PublicSubnetSecurityGroup
+        - GroupId
+
+  PrivateSubnetSSHRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow SSH from Bastion Hosts
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      SourceSecurityGroupId:
+        !GetAtt
+        - PublicSubnetSecurityGroup
+        - GroupId
+      GroupId:
+        !GetAtt
+        - PrivateSubnetSecurityGroup
+        - GroupId
+
+  vpcFlowLogRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - 
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "vpc-flow-logs.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+
+  vpcFlowLogPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          - logs:DescribeLogGroups
+          - logs:DescribeLogStreams
+          Resource:
+          - arn:aws:logs:*:*:*
+      PolicyName: vpcFlowLogPolicy
+      Roles:
+      - !Ref vpcFlowLogRole
+
+  vpcFlowLog:
+    Type: "AWS::EC2::FlowLog"
+    Properties:
+      DeliverLogsPermissionArn : !GetAtt vpcFlowLogRole.Arn
+      LogGroupName : securityGroupVpcFlowLogs
+      ResourceId : !Ref vpc
+      ResourceType : VPC
+      TrafficType : ALL
+
+Outputs:
+  VPC:
+    Description: A reference to the created VPC
+    Value: !Sub '${VPC} - ${VpcCIDR}'
+
+  PublicSubnet1:
+    Description: A reference to the public subnet in the 1st Availability Zone
+    Value: !Sub '${PublicSubnet1} - ${PublicSubnet1CIDR}'
+
+  PrivateSubnet1:
+    Description: A reference to the private subnet in the 1st Availability Zone
+    Value: !Sub '${PrivateSubnet1} - ${PrivateSubnet1CIDR}'
+
+  DefaultSecurityGroup:
+    Description: The default subnet Id
+    Value: !GetAtt vpc.DefaultSecurityGroup
