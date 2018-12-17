@@ -6,6 +6,6 @@ Resources:
   vpc:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3-eu-west-1.amazonaws.com/onprem-cf/vpc_template.yaml
+      TemplateURL: https://s3-eu-west-1.amazonaws.com/policedemo-cf-templates/vpc_template.yaml
       Parameters:
         POCRole: !Ref SSMInstanceProfile
