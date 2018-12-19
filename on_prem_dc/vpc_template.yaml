@@ -40,7 +40,7 @@ Resources:
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: !Sub '${EnvironmentName} On Prem'
+          Value: !Sub ${EnvironmentName} VPC
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -64,7 +64,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: !Sub Pub_Subnet_${EnvironmentName}
+          Value: !Sub ${EnvironmentName}_Pub_Subnet
 
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
@@ -75,7 +75,7 @@ Resources:
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
-          Value: !Sub Priv_Subnet_${EnvironmentName}
+          Value: !Sub ${EnvironmentName}_Priv_Subnet
 
   NatGateway1EIP:
     Type: AWS::EC2::EIP
@@ -162,17 +162,14 @@ Resources:
         - PublicSubnetSecurityGroup
         - GroupId
 
-  PrivateSubnetSSHRule:
+  PrivateSubnetAccessRule:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       Description: Allow SSH from Bastion Hosts
       IpProtocol: tcp
-      FromPort: 22
-      ToPort: 22
-      SourceSecurityGroupId:
-        !GetAtt
-        - PublicSubnetSecurityGroup
-        - GroupId
+      CidrIp: 0.0.0.0/0
+      FromPort: 3389
+      ToPort: 3389
       GroupId:
         !GetAtt
         - PrivateSubnetSecurityGroup
@@ -217,23 +214,35 @@ Resources:
     Properties:
       DeliverLogsPermissionArn : !GetAtt vpcFlowLogRole.Arn
       LogGroupName : securityGroupVpcFlowLogs
-      ResourceId : !Ref vpc
+      ResourceId : !Ref VPC
       ResourceType : VPC
       TrafficType : ALL
 
 Outputs:
   VPC:
     Description: A reference to the created VPC
-    Value: !Sub '${VPC} - ${VpcCIDR}'
+    Value: !Sub '${VPC}'
+  
+  VPCCIDR:
+    Description: The CIDR Block of the created VPC
+    Value: !Sub '${VpcCIDR}'
 
   PublicSubnet1:
     Description: A reference to the public subnet in the 1st Availability Zone
-    Value: !Sub '${PublicSubnet1} - ${PublicSubnet1CIDR}'
+    Value: !Sub '${PublicSubnet1}'
+  
+  PublicSubnet1CIDR:
+    Description: The CIDR block of the public subnet
+    Value: !Sub '${PublicSubnet1CIDR}'
 
   PrivateSubnet1:
     Description: A reference to the private subnet in the 1st Availability Zone
-    Value: !Sub '${PrivateSubnet1} - ${PrivateSubnet1CIDR}'
+    Value: !Sub '${PrivateSubnet1}'
+
+  PrivateSubnet1CIDR:
+    Description: The CIDR block of the private subnet
+    Value: !Sub '${PrivateSubnet1CIDR}'
 
   DefaultSecurityGroup:
-    Description: The default subnet Id
-    Value: !GetAtt vpc.DefaultSecurityGroup
+    Description: The default security group Id
+    Value: !GetAtt VPC.DefaultSecurityGroup
