@@ -14,3 +14,17 @@ https://s3-eu-west-1.amazonaws.com/aws-shared-demo-cf-templates/vpc/vpc-1.yaml
 
 # Uploading new templates
 
+*To upload a single template*
+```
+./upload_template.sh <profile> <filename>
+```
+
+e.g. 
+```
+./upload_template.sh demoAccount vpc/vpc-1.yaml
+```
+
+*To upload all yaml files*
+```
+./upload_template.sh policedemo all
+```
