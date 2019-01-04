@@ -13,8 +13,8 @@ elif [ -z $filename ]; then
 elif [ $filename == "all" ]; then
     filelist=$(find . -type f -iname '*.yaml' | sed 's/^\.\///g')
     for file in ${filelist[@]}; do
-        aws s3 cp $file s3://aws-shared-demo-cf-templates/$file
+        aws s3 cp $file s3://aws-shared-demo-cf-templates/$file --profile $profile --acl public-read
     done
 else
-    aws s3 cp $filename s3://aws-shared-demo-cf-templates/$filename
+    aws s3 cp $filename s3://aws-shared-demo-cf-templates/$filename --profile $profile --acl public-read
 fi
