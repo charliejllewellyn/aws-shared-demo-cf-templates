@@ -60,3 +60,16 @@ Resources:
         KeyPairName: !Ref KeyPairName
         DomainAdminPassword: !Ref DomainAdminPassword
 
+  vpn:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-eu-west-1.amazonaws.com/aws-shared-demo-cf-templates/vpn/vpnDemo-aws.yaml
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Ref ProjectName
+      Parameters:
+        KeyName: !Ref KeyPairName
+        vpcId: !GetAtt vpc.Outputs.vpcId
+        subnetId: !GetAtt vpc.Outputs.subnetAId

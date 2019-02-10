@@ -4,23 +4,20 @@ Parameters:
   KeyName:
     Type: String
     Description: SSH keypair to use to access test instance
-    Default: cjl-aws-mac
-  ProjectName:
+  vpcId:
     Type: String
-    Description: Project name that will be used to name and identify resoures that are created
-    Default: vpnDemo
-  vpcCidrBlock:
+    Description: VPC ID to deploy VPN server in
+  subnetId:
     Type: String
-    Default: 192.168.0.0/16
-    Description: Project name that will be used to name and identify resoures that are created
+    Description: Public Subnet ID to place VPN Server in
 Mappings:
   RegionMap:
     eu-central-1:
       "64": "ami-9a91b371"
     eu-west-1:
-      "64": "ami-ca0135b3"
+      "64": "ami-0fad7378adf284ce0"
     eu-west-2:
-      "64": "ami-c12dcda6"
+      "64": "ami-0664a710233d7c148"
     eu-west-3:
       "64": "ami-cae150b7"
     sa-east-1:
@@ -50,35 +47,18 @@ Mappings:
 
 Resources:
  
-  vpc:
-    Type: "AWS::CloudFormation::Stack"
-    Properties:
-      Parameters:
-        vpcCidrBlock: 192.168.0.0/16
-      Tags:
-        -
-          Key: ProjectName
-          Value: !Ref ProjectName
-        -
-          Key: Name
-          Value: !Ref ProjectName
-      TemplateURL: https://s3.amazonaws.com/cjl-cloudformation-stack-templates/vpc.yaml
-
   securityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow http to client host
-      VpcId: !GetAtt vpc.Outputs.vpcId
+      GroupDescription: Allow SSH to VPN server
+      VpcId: !Ref vpcId
       SecurityGroupIngress:
       - IpProtocol: tcp
         FromPort: '22'
         ToPort: '22'
         CidrIp: 0.0.0.0/0
-      Tags:
-      - Key: ProjectName
-        Value: !Ref ProjectName
 
-  privateTestInstance:
+  vpnServer:
     Type: "AWS::EC2::Instance"
     Properties:
       InstanceType: t2.nano
@@ -88,10 +68,27 @@ Resources:
           DeviceIndex: "0"
           GroupSet:
             - !Ref securityGroup
-          SubnetId: !GetAtt vpc.Outputs.subnetAId
+          SubnetId: !Ref subnetId
       KeyName: !Ref KeyName
-      Tags:
-      - Key: ProjectName
-        Value: !Ref ProjectName
-      - Key: Name
-        Value: Test VPN instance
+      UserData:
+        "Fn::Base64":
+          !Sub |
+            #!/bin/bash -xe
+            yum -y update
+            yum install -y openswan
+
+  eip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  AssociateEip:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt eip.AllocationId
+      InstanceId: !Ref vpnServer
+
+Outputs:
+  VPNServerIp: 
+    Description: On prem VPN server IP address
+    Value: !Ref eip
