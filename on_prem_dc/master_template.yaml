@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: "This cloudformation stack uses nested templates to deploy a cloud enviroment that can be used to mimic a customers on prem enviroment.  This can then be used to demonstrate how AWS services can integrate with on premise enviroments such as creating an VPN to connect the two or extending an existing Active Directory into AWS."
+
+Parameters:
+  DomainAdminPassword:
+    Description: Domain admin password to connect to domain
+    Type: String
+  KeyPairName:
+    Description: keypair to use to access instances
+    Type: String
+  ProjectName: 
+    Description: Name to tag resources with
+    Type: String
+    Default: on-prem-demo
+
+Resources:
+  vpc:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-eu-west-1.amazonaws.com/aws-shared-demo-cf-templates/vpc/vpc-1.yaml
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Ref ProjectName
+
+  ad:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-eu-west-1.amazonaws.com/aws-shared-demo-cf-templates/ad/ad-1.yaml
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Ref ProjectName
+      Parameters:
+        ADServer1InstanceType: t2.large
+        ADServer1PrivateIP: 10.0.0.40
+        ADServer2InstanceType: t2.large
+        ADServer2PrivateIP: 10.0.0.53
+        DomainDNSName: onprem.local
+        DomainNetBIOSName: onprem
+        PrivateSubnet1ID: !GetAtt vpc.Outputs.privateSubnetAId 
+        PrivateSubnet2ID: !GetAtt vpc.Outputs.privateSubnetBId
+        VPCID: !GetAtt vpc.Outputs.vpcId
+        KeyPairName: !Ref KeyPairName
+        DomainAdminPassword: !Ref DomainAdminPassword
+
