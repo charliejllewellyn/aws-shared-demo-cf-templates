@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: "2010-09-09"
+  
+Description: "This cloudformation stack creates a NAT GW"
+
+Parameters:
+  SubnetId:
+    Description: Public subnet that will support the NAT GW's access to the internet
+    Type: String
+  RouteTableId:
+    Description: Routetable to update to use the NAT GW as it's default route
+    Type: String
+
+Resources:
+
+  NAT:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - EIP
+        - AllocationId
+      SubnetId: !Ref SubnetId
+
+  EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  Route:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTableId
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NAT

@@ -88,11 +88,22 @@ Resources:
       RouteTableId: !Ref publicRouteTable
       SubnetId: !Ref publicSubnetA
 
-  subnetAssB:
+  privateRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref vpc
+
+  privateSubnetAssA:
     Type: "AWS::EC2::SubnetRouteTableAssociation"
     Properties:
-      RouteTableId: !Ref publicRouteTable
-      SubnetId: !Ref publicSubnetB
+      RouteTableId: !Ref privateRouteTable
+      SubnetId: !Ref privateSubnetA
+
+  privateSubnetAssB:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref privateRouteTable
+      SubnetId: !Ref privateSubnetB
 
   vpcFlowLogRole:
     Type: "AWS::IAM::Role"
@@ -168,3 +179,9 @@ Outputs:
   DefaultSecurityGroup:
     Description: The default subnet Id
     Value: !GetAtt vpc.DefaultSecurityGroup
+  publicRouteTable:
+    Description: The private route table ID
+    Value: !Ref publicRouteTable
+  privateRouteTable:
+    Description: The private route table ID
+    Value: !Ref privateRouteTable

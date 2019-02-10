@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: "2010-09-09"
+  
+Description: "This cloudformation stack uses nested templates to deploy a cloud enviroment that can be used to mimic a customers on prem enviroment.  This can then be used to demonstrate how AWS services can integrate with on premise enviroments such as creating an VPN to connect the two or extending an existing Active Directory into AWS."
+
+Parameters:
+  KeyPairName:
+    Description: keypair to use to access instances
+    Type: String
+  ProjectName:
+    Description: Name to tag resources with
+    Type: String
+    Default: nat-gateway-demo
+
+Resources:
+  vpc:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-eu-west-1.amazonaws.com/aws-shared-demo-cf-templates/vpc/vpc-1.yaml
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Ref ProjectName
+  nat:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-eu-west-1.amazonaws.com/aws-shared-demo-cf-templates/nat/nat.yaml
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Ref ProjectName
+      Parameters:
+        SubnetId: !GetAtt vpc.Outputs.subnetAId
+        RouteTableId: !GetAtt vpc.Outputs.privateRouteTable
