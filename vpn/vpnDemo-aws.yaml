@@ -76,9 +76,9 @@ Resources:
             #!/bin/bash -xe
             yum -y update
             yum install -y openswan
-       Tags:
-        - Key: Name
-          Value: Openswan VPN Server
+      Tags:
+       - Key: Name
+         Value: Openswan VPN Server
 
   eip:
     Type: AWS::EC2::EIP
