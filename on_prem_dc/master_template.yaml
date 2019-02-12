@@ -49,9 +49,9 @@ Resources:
           Value: !Ref ProjectName
       Parameters:
         ADServer1InstanceType: t2.large
-        ADServer1PrivateIP: 10.0.0.40
+        ADServer1PrivateIP: 192.168.0.40
         ADServer2InstanceType: t2.large
-        ADServer2PrivateIP: 10.0.0.53
+        ADServer2PrivateIP: 192.168.0.53
         DomainDNSName: onprem.local
         DomainNetBIOSName: onprem
         PrivateSubnet1ID: !GetAtt vpc.Outputs.privateSubnetAId 
@@ -73,3 +73,20 @@ Resources:
         KeyName: !Ref KeyPairName
         vpcId: !GetAtt vpc.Outputs.vpcId
         subnetId: !GetAtt vpc.Outputs.subnetAId
+        publicRouteTable: !GetAtt vpc.Outputs.publicRouteTable
+        privateRouteTable: !GetAtt vpc.Outputs.privateRouteTable
+        remoteSubnet: 10.0.0.0/16
+
+  fakedb:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-eu-west-1.amazonaws.com/aws-shared-demo-cf-templates/fake-database/fakedb.yaml
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Ref ProjectName
+      Parameters:
+        KeyName: !Ref KeyPairName
+        vpcId: !GetAtt vpc.Outputs.vpcId
+        subnetId: !GetAtt vpc.Outputs.privateSubnetAId

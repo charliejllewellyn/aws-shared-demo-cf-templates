@@ -10,15 +10,6 @@ Parameters:
   subnetId:
     Type: String
     Description: Public Subnet ID to place VPN Server in
-  publicRouteTable:
-    Type: String
-    Description: Public Route Table ID
-  privateRouteTable:
-    Type: String
-    Description: Private Route Table ID
-  remoteSubnet:
-    Type: String
-    Description: Private Route Table ID
 
 Mappings:
   RegionMap:
@@ -66,69 +57,38 @@ Resources:
         FromPort: '22'
         ToPort: '22'
         CidrIp: 0.0.0.0/0
-      - IpProtocol: udp
-        FromPort: '4500'
-        ToPort: '4500'
-        CidrIp: 0.0.0.0/0
-      - IpProtocol: udp
-        FromPort: '500'
-        ToPort: '500'
-        CidrIp: 0.0.0.0/0
-      - IpProtocol: udp
-        FromPort: '50'
-        ToPort: '50'
+      - IpProtocol: tcp
+        FromPort: '3306'
+        ToPort: '3306'
         CidrIp: 0.0.0.0/0
 
-  vpnServer:
+  fakedb:
     Type: "AWS::EC2::Instance"
     Properties:
       InstanceType: t2.nano
       ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", 64]
       NetworkInterfaces:
-        - AssociatePublicIpAddress: "true"
+        - AssociatePublicIpAddress: "false"
           DeviceIndex: "0"
           GroupSet:
             - !Ref securityGroup
           SubnetId: !Ref subnetId
       KeyName: !Ref KeyName
-      SourceDestCheck: false
       UserData:
         "Fn::Base64":
           !Sub |
-            #!/bin/bash -xe
-            yum -y update
-            yum install -y openswan
-            echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf
+            #!/bin/bash
+
+            yum install -y mariadb-server git
+            service mariadb start
+            chkconfig mariadb on
+            git clone https://github.com/datacharmer/test_db
+            cd test_db
+            mysql -t < employees.sql
+            mysql --execute "CREATE USER 'dbuser' IDENTIFIED BY 'password12345';"
+            mysql --execute "GRANT USAGE ON *.* TO 'dbuser'@'%' IDENTIFIED BY 'password12345';"
+            mysql --executre "GRANT ALL privileges ON *.* TO 'dbuser'@'%';"
+            mysql --execute "FLUSH PRIVILEGES;"
       Tags:
        - Key: Name
-         Value: Openswan VPN Server
-
-  eip:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-
-  AssociateEip:
-    Type: AWS::EC2::EIPAssociation
-    Properties:
-      AllocationId: !GetAtt eip.AllocationId
-      InstanceId: !Ref vpnServer
-
-  publicRoute:
-    Type: "AWS::EC2::Route"
-    Properties:
-      DestinationCidrBlock: !Ref remoteSubnet
-      InstanceId: !Ref vpnServer
-      RouteTableId: !Ref publicRouteTable
-
-  privateRoute:
-    Type: "AWS::EC2::Route"
-    Properties:
-      DestinationCidrBlock: !Ref remoteSubnet
-      InstanceId: !Ref vpnServer
-      RouteTableId: !Ref privateRouteTable
-
-Outputs:
-  VPNServerIp: 
-    Description: On prem VPN server IP address
-    Value: !Ref eip
+         Value: Sample mysql DB

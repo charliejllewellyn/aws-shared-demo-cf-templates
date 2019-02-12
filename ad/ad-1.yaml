@@ -257,11 +257,11 @@ Resources:
       Tags:
         - Key: Domain
           Value: !Ref 'DomainDNSName'
-  VPCDHCPOptionsAssociation:
-    Type: AWS::EC2::VPCDHCPOptionsAssociation
-    Properties:
-      VpcId: !Ref 'VPCID'
-      DhcpOptionsId: !Ref 'DHCPOptions'
+          #VPCDHCPOptionsAssociation:
+          #  Type: AWS::EC2::VPCDHCPOptionsAssociation
+          #  Properties:
+          #    VpcId: !Ref 'VPCID'
+          #    DhcpOptionsId: !Ref 'DHCPOptions'
   AWSQuickstartActiveDirectoryDS:
     Type: AWS::SSM::Document
     Properties:

@@ -3,7 +3,7 @@ AWSTemplateFormatVersion: 2010-09-09
 Parameters:
   vpcCidrBlock:
     Type: String
-    Default: 10.0.0.0/16
+    Default: 192.168.0.0/16
     Description: Project name that will be used to name and identify resoures that are created
 
 Resources:
@@ -87,6 +87,12 @@ Resources:
     Properties:
       RouteTableId: !Ref publicRouteTable
       SubnetId: !Ref publicSubnetA
+
+  subnetAssB:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref publicRouteTable
+      SubnetId: !Ref publicSubnetB
 
   privateRouteTable:
     Type: "AWS::EC2::RouteTable"
