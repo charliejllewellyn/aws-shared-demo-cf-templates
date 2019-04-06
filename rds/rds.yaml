@@ -1,0 +1,132 @@
+AWSTemplateFormatVersion: "2010-09-09"
+  
+Description: "This cloudformation stack uses nested templates to deploy a cloud enviroment that can be used to mimic a customers on prem enviroment.  This can then be used to demonstrate how AWS services can integrate with on premise enviroments such as creating an VPN to connect the two or extending an existing Active Directory into AWS."
+
+Parameters:
+  ProjectName:
+    Description: Name to tag resources with
+    Type: String
+    Default: rds-demo
+  DirectoryServiceId:
+    Description: Directory Service ID to associate database with
+    Type: String
+  privateSubnetA:
+    Description: VPC private subnet A
+    Type: String
+  privateSubnetB:
+    Description: VPC private subnet B
+    Type: String
+  VPCId:
+    Description: VPC ID
+    Type: String
+  SourceSecurityGroupId:
+    Description: VPC default security group
+    Type: String
+
+Resources:
+  rdsDsRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "rdsdemo-ds-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "rds.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonRDSDirectoryServiceAccess
+      Path: "/"
+
+  rdsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: "A sample key"
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: Enable IAM User Permissions
+          Effect: Allow
+          Principal:
+            AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+          Action: kms:*
+          Resource: "*"
+        - Sid: Allow use of the key
+          Effect: Allow
+          Principal:
+            AWS: !GetAtt rdsDsRole.Arn
+          Action:
+          - kms:Encrypt
+          - kms:Decrypt
+          - kms:ReEncrypt*
+          - kms:GenerateDataKey*
+          - kms:DescribeKey
+          Resource: "*"
+        - Sid: Allow attachment of persistent resources
+          Effect: Allow
+          Principal:
+            AWS: !GetAtt rdsDsRole.Arn
+          Action:
+          - kms:CreateGrant
+          - kms:ListGrants
+          - kms:RevokeGrant
+          Resource: "*"
+          Condition:
+            Bool:
+              kms:GrantIsForAWSResource: 'true'
+
+  rdsSecurityGroup:           # Test VPN Security Group - Allow SSH from Bastion
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: 'RDS Demo'
+      VpcId: !Ref VPCId
+      SecurityGroupIngress:
+      - IpProtocol: tcp                 # Allow SSH from the Trusted Network
+        FromPort: '1433'
+        ToPort: '1433'
+        SourceSecurityGroupId: !Ref SourceSecurityGroupId
+
+  rdsDBSubnetGroup: 
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties: 
+      DBSubnetGroupDescription: "RDS Demo subnet Group"
+      SubnetIds: 
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+
+  dbCluster:
+    DependsOn: rdsDsRole
+    Type: AWS::RDS::DBInstance
+    Properties: 
+      AllocatedStorage: "200"
+      Engine: "sqlserver-se"
+      EngineVersion: "14.00.3015.40.v1"
+      Iops: "1000"
+      AllowMajorVersionUpgrade: true
+      AutoMinorVersionUpgrade: true
+      BackupRetentionPeriod: 7
+      CopyTagsToSnapshot: true
+      DBInstanceClass: "db.m5.large"
+      DBSubnetGroupName: !Ref rdsDBSubnetGroup
+      DeleteAutomatedBackups: true
+      Domain: !Ref DirectoryServiceId
+      DomainIAMRoleName: "rdsdemo-ds-role"
+      EnablePerformanceInsights: true
+      PerformanceInsightsKMSKeyId: !GetAtt rdsKey.Arn
+      PerformanceInsightsRetentionPeriod: 7
+      VPCSecurityGroups: 
+      MultiAZ: true
+      VPCSecurityGroups:
+      - !Ref SourceSecurityGroupId
+      MasterUsername: dbuser
+      MasterUserPassword: Password123!!
+      LicenseModel: license-included
+
+Outputs:
+  dbEndpoint:
+    Description: Database endpoint
+    Value: !GetAtt dbCluster.Endpoint.Address

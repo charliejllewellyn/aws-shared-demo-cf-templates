@@ -1,0 +1,230 @@
+AWSTemplateFormatVersion: "2010-09-09"
+  
+Description: "This cloudformation stack uses nested templates to deploy a cloud enviroment that can be used to mimic a customers on prem enviroment.  This can then be used to demonstrate how AWS services can integrate with on premise enviroments such as creating an VPN to connect the two or extending an existing Active Directory into AWS."
+
+Mappings:
+  RegionMap:
+    eu-west-1:
+      AMI: "ami-0e19770d1a2173385"
+    eu-west-2:
+      AMI: "ami-035d23ab461a09ab6"
+
+Parameters:
+  ProjectName:
+    Description: Name to tag resources with
+    Type: String
+    Default: rds-demo
+  KeyName:
+    Description: Keypair name
+    Type: String
+
+Resources:
+  vpc:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-eu-west-1.amazonaws.com/aws-shared-demo-cf-templates/vpc/vpc-1.yaml
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Ref ProjectName
+  nat:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-eu-west-1.amazonaws.com/aws-shared-demo-cf-templates/nat/nat.yaml
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Ref ProjectName
+      Parameters:
+        SubnetId: !GetAtt vpc.Outputs.subnetAId
+        RouteTableId: !GetAtt vpc.Outputs.privateRouteTable
+
+  ad:
+    DependsOn: nat
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://aws-quickstart.s3.amazonaws.com/quickstart-microsoft-activedirectory/templates/ad-3.template
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Ref ProjectName
+      Parameters:
+        VPCID: !GetAtt vpc.Outputs.vpcId
+        VPCCIDR: 192.168.0.0/16
+        PrivateSubnet1CIDR: 192.168.0.32/28
+        PrivateSubnet1ID: !GetAtt vpc.Outputs.privateSubnetAId
+        PrivateSubnet2CIDR: 192.168.0.48/28
+        PrivateSubnet2ID: !GetAtt vpc.Outputs.privateSubnetBId
+        PublicSubnet1CIDR: 192.168.0.0/28
+        PublicSubnet2CIDR: 192.168.0.16/28
+        DomainDNSName: example.com
+        DomainNetBIOSName: example
+        DomainAdminPassword: Password123!!
+        ADEdition: Enterprise
+
+  rds:
+    DependsOn: ad
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-eu-west-1.amazonaws.com/aws-shared-demo-cf-templates/rds/rds.yaml
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Name
+          Value: !Ref ProjectName
+      Parameters:
+        DirectoryServiceId: !GetAtt ad.Outputs.DirectoryID
+        privateSubnetA: !GetAtt vpc.Outputs.privateSubnetAId
+        privateSubnetB: !GetAtt vpc.Outputs.privateSubnetBId
+        VPCId: !GetAtt vpc.Outputs.vpcId
+        SourceSecurityGroupId: !GetAtt vpc.Outputs.DefaultSecurityGroup
+
+  TestVPNServerRole:                    # EC2 role for VPN Server - allow SSM, CWL
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+
+  TestVPNServerInstanceProfile:             # EC2 Instance profile for App Server
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+        - !Ref TestVPNServerRole
+
+  myDhcpOptions: 
+    Type: AWS::EC2::DHCPOptions
+    Properties: 
+      DomainName: example.com
+      DomainNameServers: 
+        - !GetAtt ad.Outputs.ADServer1PrivateIP
+        - !GetAtt ad.Outputs.ADServer2PrivateIP
+      NtpServers: 
+        - !GetAtt ad.Outputs.ADServer1PrivateIP
+      NetbiosNameServers: 
+        - !GetAtt ad.Outputs.ADServer2PrivateIP
+      NetbiosNodeType: 2
+
+  associateDhcpOptions:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties: 
+      DhcpOptionsId: !Ref myDhcpOptions
+      VpcId: !GetAtt vpc.Outputs.vpcId
+
+  myssmdocument:
+    Type: AWS::SSM::Document
+    Properties:
+      Content:
+        schemaVersion: '1.2'
+        description: Join instances to an AWS Directory Service domain.
+        parameters:
+          directoryId:
+            type: String
+            description: "(Required) The ID of the AWS Directory Service directory."
+          directoryName:
+            type: String
+            description: "(Required) The name of the directory; for example, test.example.com"
+          dnsIpAddresses:
+            type: StringList
+            default: []
+            description: "(Optional) The IP addresses of the DNS servers in the directory.
+              Required when DHCP is not configured. Learn more at http://docs.aws.amazon.com/directoryservice/latest/simple-ad/join_get_dns_addresses.html"
+            allowedPattern: "((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
+        runtimeConfig:
+          aws:domainJoin:
+            properties:
+              directoryId: "{{ directoryId }}"
+              directoryName: "{{ directoryName }}"
+              dnsIpAddresses: "{{ dnsIpAddresses }}"
+
+  instanceSecurityGroup:           # Test VPN Security Group - Allow SSH from Bastion
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: 'RDS Demo'
+      VpcId: !GetAtt vpc.Outputs.vpcId
+      SecurityGroupIngress:
+      - IpProtocol: tcp                 # Allow SSH from the Trusted Network
+        FromPort: '3389'
+        ToPort: '3389'
+        CidrIp: 0.0.0.0/0
+
+  Ec2Instance:
+    DependsOn: rds
+    Type: AWS::EC2::Instance
+    Properties:
+      SecurityGroupIds:
+        - !Ref instanceSecurityGroup
+        - !GetAtt vpc.Outputs.DefaultSecurityGroup
+      ImageId:
+        Fn::FindInMap:
+          - "RegionMap"
+          - Ref: "AWS::Region"
+          - "AMI"
+      IamInstanceProfile: !Ref TestVPNServerInstanceProfile
+      SsmAssociations:
+        - DocumentName: !Ref myssmdocument
+          AssociationParameters:
+          - Key: directoryId
+            Value: 
+            - !GetAtt ad.Outputs.DirectoryID
+          - Key: directoryName
+            Value: 
+            - example.com
+          - Key: dnsIpAddresses
+            Value:
+            - !GetAtt ad.Outputs.ADServer1PrivateIP
+            - !GetAtt ad.Outputs.ADServer2PrivateIP
+      InstanceType: m5.large
+      KeyName: !Ref KeyName
+      SubnetId: !GetAtt vpc.Outputs.subnetAId
+      UserData:
+        "Fn::Base64":
+          !Sub |
+            <powershell>
+            Invoke-WebRequest -Uri https://download.microsoft.com/download/0/a/4/0a41538e-2d57-40ff-ae85-ec4459f7cdaa/RMLSetup_AMD64.msi -OutFile C:\Users\Administrator\rml.msi
+            Start-Process -FilePath msiexec.exe -ArgumentList '/i','C:\Users\Administrator\rml.msi','/q' -Wait -PassThru -Verb "RunAs"
+            Install-WindowsFeature -name Telnet-Client
+            Invoke-WebRequest -Uri https://raw.githubusercontent.com/charliejllewellyn/aws-shared-demo-cf-templates/master/rds/Install-Northwind-Script.sql -OutFile C:\Users\Administrator\Install-Northwind-Script.sql
+            # Set file and folder path for SSMS installer .exe
+            $folderpath="c:\windows\temp"
+            $filepath="$folderpath\SSMS-Setup-ENU.exe"
+            
+            #If SSMS not present, download
+            if (!(Test-Path $filepath)){
+            write-host "Downloading SQL Server 2016 SSMS..."
+            $URL = "https://go.microsoft.com/fwlink/?linkid=2043154"
+            $clnt = New-Object System.Net.WebClient
+            $clnt.DownloadFile($url,$filepath)
+            Write-Host "SSMS installer download complete" -ForegroundColor Green
+            
+            }
+            else {
+            
+            write-host "Located the SQL SSMS Installer binaries, moving on to install..."
+            }
+            
+            # start the SSMS installer
+            write-host "Beginning SSMS 2016 install..." -nonewline
+            $Parms = " /Install /Quiet /Norestart /Logs log.txt"
+            $Prms = $Parms.Split(" ")
+            & "$filepath" $Prms | Out-Null
+            Write-Host "SSMS installation complete" -ForegroundColor Green
+            echo '& "C:\Program Files\Microsoft Corporation\RMLUtils\ostress" -S"${rds.Outputs.dbEndpoint}" -Udbuser -PPassword123!! -iC:\Users\Administrator\Install-Northwind-Script.sql' > c:\users\administrator\setupdb.ps1
+            echo '& "C:\Program Files\Microsoft Corporation\RMLUtils\ostress" -S"${rds.Outputs.dbEndpoint}" -Udbuser -PPassword123!! -dNorthwind -Q"select OrderID, ProductID, UnitPrice, Quantity, Discount from [Order Details]; update [Order Details] SET UnitPrice = UnitPrice + 1; update [Order Details] SET Quantity = Quantity + 1;  update [Order Details] SET Discount = Discount + 1" -n25 -r50 -o"C:\Users\Administrator"' > c:\users\administrator\runtest.ps1
+            # & 'C:\Program Files\Microsoft Corporation\RMLUtils\ostress' -E -S"rd1bs1y8i1h0kso.cz8i5qtwdqwj.eu-west-1.rds.amazonaws.com" -Udbuser -PPassword123!! -dNorthwind -Q"select OrderID, ProductID, UnitPrice, Quantity, Discount from [Order Details]; update [Order Details] SET UnitPrice = UnitPrice + 1; update [Order Details] SET Quantity = Quantity + 1;  update [Order Details] SET Discount = Discount + 1" -n25 -r50 -o"C:\Users\Administrator"
+            #Invoke-WebRequest -Uri https://go.microsoft.com/fwlink/?linkid=2043154 -OutFile ssms.exe
+            </powershell>
