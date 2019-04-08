@@ -5,6 +5,9 @@ Parameters:
     Type: String
     Default: 192.168.0.0/16
     Description: Project name that will be used to name and identify resoures that are created
+  ProjectName:
+    Type: String
+    Default: vpc-demo
 
 Resources:
 
@@ -20,46 +23,46 @@ Resources:
     Properties:
       MapPublicIpOnLaunch: true
       VpcId: !Ref vpc
-      CidrBlock: !Select [0, !Cidr [!Ref vpcCidrBlock, 6, 4]]
+      CidrBlock: !Select [0, !Cidr [!Ref vpcCidrBlock, 6, 8]]
       AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", a ] ]
       Tags:
         -
           Key: Name
-          Value: !Join [ "", [ "public-", a ] ]
+          Value: !Join [ "", [ !Ref ProjectName, "-public-", a ] ]
 
   publicSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
       MapPublicIpOnLaunch: true
       VpcId: !Ref vpc
-      CidrBlock: !Select [1, !Cidr [!Ref vpcCidrBlock, 6, 4]]
+      CidrBlock: !Select [1, !Cidr [!Ref vpcCidrBlock, 6, 8]]
       AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", b ] ]
       Tags:
         -
           Key: Name
-          Value: !Join [ "", [ "public-", b ] ]
+          Value: !Join [ "", [ !Ref ProjectName, "-public-", b ] ]
 
   privateSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref vpc
-      CidrBlock: !Select [2, !Cidr [!Ref vpcCidrBlock, 6, 4]]
+      CidrBlock: !Select [2, !Cidr [!Ref vpcCidrBlock, 6, 8]]
       AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", a ] ]
       Tags:
         -
           Key: Name
-          Value: !Join [ "", [ "private-", a ] ]
+          Value: !Join [ "", [ !Ref ProjectName, "-private-", a ] ]
 
   privateSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref vpc
-      CidrBlock: !Select [3, !Cidr [!Ref vpcCidrBlock, 6, 4]]
+      CidrBlock: !Select [3, !Cidr [!Ref vpcCidrBlock, 6, 8]]
       AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", b ] ]
       Tags:
         -
           Key: Name
-          Value: !Join [ "", [ "private-", b ] ]
+          Value: !Join [ "", [ !Ref ProjectName, "-private-", b ] ]
 
   myInternetGateway:
     Type: "AWS::EC2::InternetGateway"
@@ -163,25 +166,25 @@ Outputs:
     Value: !Ref publicSubnetA
   subnetAIp:
     Description: The IP of Subnet A
-    Value: !Select [0, !Cidr [!Ref vpcCidrBlock, 6, 4]]
+    Value: !Select [0, !Cidr [!Ref vpcCidrBlock, 6, 8]]
   subnetBId:
     Description: The ID of Subnet B
     Value: !Ref publicSubnetB
   subnetBIp:
     Description: The IP of Subnet B
-    Value: !Select [1, !Cidr [!Ref vpcCidrBlock, 6, 4]]
+    Value: !Select [1, !Cidr [!Ref vpcCidrBlock, 6, 8]]
   privateSubnetAId:
     Description: The ID of Subnet A
     Value: !Ref privateSubnetA
   privateSubnetAIp:
     Description: The IP of Subnet A
-    Value: !Select [2, !Cidr [!Ref vpcCidrBlock, 6, 4]]
+    Value: !Select [2, !Cidr [!Ref vpcCidrBlock, 6, 8]]
   privateSubnetBId:
     Description: The ID of Subnet B
     Value: !Ref privateSubnetB
   privateSubnetBIp:
     Description: The IP of Subnet B
-    Value: !Select [3, !Cidr [!Ref vpcCidrBlock, 6, 4]]
+    Value: !Select [3, !Cidr [!Ref vpcCidrBlock, 6, 8]]
   DefaultSecurityGroup:
     Description: The default subnet Id
     Value: !GetAtt vpc.DefaultSecurityGroup
