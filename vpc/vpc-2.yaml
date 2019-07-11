@@ -1,0 +1,234 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  vpcCidrBlock:
+    Type: String
+    Default: 192.168.0.0/16
+    Description: Project name that will be used to name and identify resoures that are created
+  ProjectName:
+    Type: String
+    Default: vpc-demo
+
+Resources:
+
+  vpc:
+    Type: "AWS::EC2::VPC"
+    Properties: 
+      CidrBlock: !Ref vpcCidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        -
+          Key: Name
+          Value: !Ref ProjectName
+
+  privateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref vpc
+      CidrBlock: !Select [2, !Cidr [!Ref vpcCidrBlock, 6, 4]]
+      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", a ] ]
+      Tags:
+        -
+          Key: Name
+          Value: !Join [ "", [ !Ref ProjectName, "-private-", a ] ]
+
+  privateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref vpc
+      CidrBlock: !Select [3, !Cidr [!Ref vpcCidrBlock, 6, 4]]
+      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", b ] ]
+      Tags:
+        -
+          Key: Name
+          Value: !Join [ "", [ !Ref ProjectName, "-private-", b ] ]
+
+  privateRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref vpc
+
+  privateSubnetAssA:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref privateRouteTable
+      SubnetId: !Ref privateSubnetA
+
+  privateSubnetAssB:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref privateRouteTable
+      SubnetId: !Ref privateSubnetB
+
+  vpcInterfaceEndpointsSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Name} Interface Endpoints"
+      VpcId: !Ref vpc
+      SecurityGroupIngress:
+      - IpProtocol: tcp   
+        FromPort: '443'
+        ToPort: '443'
+        CidrIp: !Ref vpcCidrBlock
+
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - '*'
+            Resource:
+              - '*'
+      RouteTableIds:
+        - !Ref privateRouteTable
+      ServiceName: !Join
+        - ''
+        - - com.amazonaws.
+          - !Ref 'AWS::Region'
+          - .s3
+      VpcId: !Ref vpc
+
+  ec2Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties: 
+      VpcId: !Ref vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ec2'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: 
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+      SecurityGroupIds: 
+        - !Ref vpcInterfaceEndpointsSecurityGroup
+
+  ec2MessenegesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ec2messages'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+      SecurityGroupIds:
+        - !Ref vpcInterfaceEndpointsSecurityGroup
+
+  ssmEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssm'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+      SecurityGroupIds:
+        - !Ref vpcInterfaceEndpointsSecurityGroup
+
+  ssmMessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssmmessages'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+      SecurityGroupIds:
+        - !Ref vpcInterfaceEndpointsSecurityGroup
+          
+  cloudwatchLogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.logs'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+      SecurityGroupIds:
+        - !Ref vpcInterfaceEndpointsSecurityGroup
+
+  cloudwatchMonitoringEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.monitoring'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+      SecurityGroupIds:
+        - !Ref vpcInterfaceEndpointsSecurityGroup
+
+  cloudformationEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.cloudformation'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+      SecurityGroupIds:
+        - !Ref vpcInterfaceEndpointsSecurityGroup
+
+  codeBuildEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.codebuild'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+      SecurityGroupIds:
+        - !Ref vpcInterfaceEndpointsSecurityGroup
+
+  codepipelineEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.codepipeline'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+      SecurityGroupIds:
+        - !Ref vpcInterfaceEndpointsSecurityGroup
+
+Outputs:
+  vpcId:
+    Description: The VPC ID
+    Value: !Ref vpc
+  privateSubnetAId:
+    Description: The ID of Subnet A
+    Value: !Ref privateSubnetA
+  privateSubnetAIp:
+    Description: The IP of Subnet A
+    Value: !Select [2, !Cidr [!Ref vpcCidrBlock, 6, 4]]
+  privateSubnetBId:
+    Description: The ID of Subnet B
+    Value: !Ref privateSubnetB
+  privateSubnetBIp:
+    Description: The IP of Subnet B
+    Value: !Select [3, !Cidr [!Ref vpcCidrBlock, 6, 4]]
+  DefaultSecurityGroup:
+    Description: The default subnet Id
+    Value: !GetAtt vpc.DefaultSecurityGroup
+  privateRouteTable:
+    Description: The private route table ID
+    Value: !Ref privateRouteTable

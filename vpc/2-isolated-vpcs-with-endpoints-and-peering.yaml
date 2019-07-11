@@ -1,0 +1,448 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  AWSIsolatedVPCCidrBlock:
+    Type: String
+    Default: 192.168.0.0/16
+    Description: Project name that will be used to name and identify resoures that are created
+  OnPremVPCCidrBlock:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: Project name that will be used to name and identify resoures that are created
+  ProjectName:
+    Type: String
+    Default: isolation-demo
+  Ami:
+    Type: String
+    Description: VPC ID of the requesting VPC
+    Default: "ami-0664a710233d7c148"
+
+Resources:
+
+  OnPremVpc:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: !Ref OnPremVPCCidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        -
+          Key: Name
+          Value: !Join [ '-', [ !Ref ProjectName, 'on-prem-vpc' ] ]
+
+  OnPremPrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref OnPremVpc
+      CidrBlock: !Select [2, !Cidr [!Ref OnPremVPCCidrBlock, 6, 8]]
+      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", a ] ]
+      Tags:
+        -
+          Key: Name
+          Value: !Join [ "", [ !Ref ProjectName, "-private-", a ] ]
+
+  OnPremPrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref OnPremVpc
+      CidrBlock: !Select [3, !Cidr [!Ref OnPremVPCCidrBlock, 6, 8]]
+      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", b ] ]
+      Tags:
+        -
+          Key: Name
+          Value: !Join [ "", [ !Ref ProjectName, "-private-", b ] ]
+
+  OnPremPrivateRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref OnPremVpc
+
+  OnPremPrivateSubnetAssA:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref OnPremPrivateRouteTable
+      SubnetId: !Ref OnPremPrivateSubnetA
+
+  OnPremPrivateSubnetAssB:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref OnPremPrivateRouteTable
+      SubnetId: !Ref OnPremPrivateSubnetB
+
+  vpc:
+    Type: "AWS::EC2::VPC"
+    Properties: 
+      CidrBlock: !Ref AWSIsolatedVPCCidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        -
+          Key: Name
+          Value: !Join [ '-', [ !Ref ProjectName, 'AWS-isolated-vpc' ] ]
+
+  privateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref vpc
+      CidrBlock: !Select [2, !Cidr [!Ref AWSIsolatedVPCCidrBlock, 6, 8]]
+      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", a ] ]
+      Tags:
+        -
+          Key: Name
+          Value: !Join [ "", [ !Ref ProjectName, "-private-", a ] ]
+
+  privateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref vpc
+      CidrBlock: !Select [3, !Cidr [!Ref AWSIsolatedVPCCidrBlock, 6, 8]]
+      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", b ] ]
+      Tags:
+        -
+          Key: Name
+          Value: !Join [ "", [ !Ref ProjectName, "-private-", b ] ]
+
+  privateRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref vpc
+
+  privateSubnetAssA:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref privateRouteTable
+      SubnetId: !Ref privateSubnetA
+
+  privateSubnetAssB:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref privateRouteTable
+      SubnetId: !Ref privateSubnetB
+
+  vpcInterfaceEndpointsSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Interface Endpoints"
+      VpcId: !Ref vpc
+      SecurityGroupIngress:
+      - IpProtocol: tcp   
+        FromPort: '443'
+        ToPort: '443'
+        CidrIp: 0.0.0.0/0
+
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - '*'
+            Resource:
+              - '*'
+      RouteTableIds:
+        - !Ref privateRouteTable
+      ServiceName: !Join
+        - ''
+        - - com.amazonaws.
+          - !Ref 'AWS::Region'
+          - .s3
+      VpcId: !Ref vpc
+
+  ec2Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties: 
+      VpcId: !Ref vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ec2'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: 
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+      SecurityGroupIds: 
+        - !Ref vpcInterfaceEndpointsSecurityGroup
+
+  ec2MessenegesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ec2messages'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+      SecurityGroupIds:
+        - !Ref vpcInterfaceEndpointsSecurityGroup
+
+  ssmEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssm'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+      SecurityGroupIds:
+        - !Ref vpcInterfaceEndpointsSecurityGroup
+
+  ssmMessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssmmessages'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref privateSubnetA
+        - !Ref privateSubnetB
+      SecurityGroupIds:
+        - !Ref vpcInterfaceEndpointsSecurityGroup
+          
+# Add DNS
+
+  EC2DNS: 
+    Type: "AWS::Route53::HostedZone"
+    Properties: 
+      HostedZoneConfig: 
+        Comment: "A hosted zone for EC2 VPC endpoints"
+      Name: !Sub 'ec2.${AWS::Region}.amazonaws.com'
+      VPCs: 
+        -
+          VPCId: !Ref OnPremVpc
+          VPCRegion: !Ref "AWS::Region"
+      HostedZoneTags: 
+        - 
+          Key: Name
+          Value: !Ref ProjectName
+
+  EC2Record:
+    DependsOn: EC2DNS
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: !Sub 'ec2.${AWS::Region}.amazonaws.com.'
+      Comment: DNS for EC2
+      Name: !Sub 'ec2.${AWS::Region}.amazonaws.com'
+      AliasTarget: 
+        DNSName: !Join [ '', [ !Select [ 1, !Split [ ':', !Select [ 0, !GetAtt ec2Endpoint.DnsEntries ] ] ], '.' ] ]
+        EvaluateTargetHealth: false
+        HostedZoneId: !Select [ 0, !Split [ ':', !Select [ 0, !GetAtt ec2Endpoint.DnsEntries ] ] ]
+      Type: A
+
+  EC2MessagesDNS: 
+    Type: "AWS::Route53::HostedZone"
+    Properties: 
+      HostedZoneConfig: 
+        Comment: "A hosted zone for EC2 messages VPC endpoints"
+      Name: !Sub 'ec2messages.${AWS::Region}.amazonaws.com'
+      VPCs: 
+        -
+          VPCId: !Ref OnPremVpc
+          VPCRegion: !Ref "AWS::Region"
+      HostedZoneTags: 
+        - 
+          Key: Name
+          Value: !Ref ProjectName
+
+  EC2MessagesRecord:
+    DependsOn: EC2MessagesDNS
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: !Sub 'ec2messages.${AWS::Region}.amazonaws.com.'
+      Comment: DNS for EC2
+      Name: !Sub 'ec2messages.${AWS::Region}.amazonaws.com'
+      AliasTarget: 
+        DNSName: !Join [ '', [ !Select [ 1, !Split [ ':', !Select [ 0, !GetAtt ec2MessenegesEndpoint.DnsEntries ] ] ], '.' ] ]
+        EvaluateTargetHealth: false
+        HostedZoneId: !Select [ 0, !Split [ ':', !Select [ 0, !GetAtt ec2MessenegesEndpoint.DnsEntries ] ] ]
+      Type: A
+
+  SSMEndpointDNS:
+    Type: "AWS::Route53::HostedZone"
+    Properties:
+      HostedZoneConfig:
+        Comment: "A hosted zone for SSM VPC endpoints"
+      Name: !Sub 'ssm.${AWS::Region}.amazonaws.com'
+      VPCs:
+        -
+          VPCId: !Ref OnPremVpc
+          VPCRegion: !Ref "AWS::Region"
+      HostedZoneTags:
+        - 
+          Key: Name
+          Value: !Ref ProjectName
+
+  SSMRecord:
+    DependsOn: SSMEndpointDNS
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: !Sub 'ssm.${AWS::Region}.amazonaws.com.'
+      Comment: DNS for EC2
+      Name: !Sub 'ssm.${AWS::Region}.amazonaws.com'
+      AliasTarget:
+        DNSName: !Join [ '', [ !Select [ 1, !Split [ ':', !Select [ 0, !GetAtt ssmEndpoint.DnsEntries ] ] ], '.' ] ]
+        EvaluateTargetHealth: false
+        HostedZoneId: !Select [ 0, !Split [ ':', !Select [ 0, !GetAtt ssmEndpoint.DnsEntries ] ] ]
+      Type: A
+
+  SSMMessagesDNS:                                                                                           
+    Type: "AWS::Route53::HostedZone"                                                                        
+    Properties:                                                                                             
+      HostedZoneConfig:                                                                                     
+        Comment: "A hosted zone for SSM messages VPC endpoints"                                             
+      Name: !Sub 'ssmmessages.${AWS::Region}.amazonaws.com'                                                 
+      VPCs:                                                                                                 
+        -                                                                                                   
+          VPCId: !Ref OnPremVpc                                                                         
+          VPCRegion: !Ref "AWS::Region"                                                                     
+      HostedZoneTags:                                                                                       
+        -                                                                                                   
+          Key: Name                                                                                         
+          Value: !Ref ProjectName                                                                           
+                                                                                                            
+  SSMMessagesRecord:                                                                                        
+    DependsOn: SSMMessagesDNS
+    Type: AWS::Route53::RecordSet                                                                           
+    Properties:                                                                                             
+      HostedZoneName: !Sub 'ssmmessages.${AWS::Region}.amazonaws.com.'                                      
+      Comment: DNS for EC2                                                                                  
+      Name: !Sub 'ssmmessages.${AWS::Region}.amazonaws.com'                                                 
+      AliasTarget:                                                                                          
+        DNSName: !Join [ '', [ !Select [ 1, !Split [ ':', !Select [ 0, !GetAtt ssmMessagesEndpoint.DnsEntries ] ] ], '.' ] ]          
+        EvaluateTargetHealth: false                                                                         
+        HostedZoneId: !Select [ 0, !Split [ ':', !Select [ 0, !GetAtt ssmMessagesEndpoint.DnsEntries ] ] ]                            
+      Type: A 
+
+# Add Peering
+
+  VPCPeeringConnection:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties:
+       VpcId: !Ref OnPremVpc
+       PeerVpcId: !Ref vpc
+
+  OnPremPeeringRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref OnPremPrivateRouteTable
+      VpcPeeringConnectionId: !Ref VPCPeeringConnection
+
+  AWSPeeringRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: !Ref OnPremVPCCidrBlock
+      RouteTableId: !Ref privateRouteTable
+      VpcPeeringConnectionId: !Ref VPCPeeringConnection
+
+# Add test instances
+
+  Ec2SSMInstanceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+
+  Ec2SSMInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+        - !Ref Ec2SSMInstanceRole
+
+  AWSSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Interface Endpoints"
+      VpcId: !Ref vpc
+      SecurityGroupIngress:
+      - IpProtocol: -1
+        FromPort: '0'
+        ToPort: '65535'
+        CidrIp: !Ref OnPremVPCCidrBlock
+
+  OnPremSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Interface Endpoints"
+      VpcId: !Ref OnPremVpc
+      SecurityGroupIngress:
+      - IpProtocol: -1
+        FromPort: '0'
+        ToPort: '65535'
+        CidrIp: !Ref AWSIsolatedVPCCidrBlock
+
+  OnPremInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: cjl-aws-mac
+      ImageId: !Ref Ami
+      InstanceType: t3.micro
+      SubnetId: !Ref OnPremPrivateSubnetA
+      IamInstanceProfile: !Ref Ec2SSMInstanceProfile
+      SecurityGroupIds:
+        - !GetAtt OnPremSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: OnPremTestInstance
+
+  AWSInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref Ami
+      InstanceType: t3.micro
+      SubnetId: !Ref privateSubnetA
+      IamInstanceProfile: !Ref Ec2SSMInstanceProfile
+      SecurityGroupIds:
+        - !GetAtt AWSSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: AWSTestInstance
+
+# Add gateway to troubleshoot or demo
+  myInternetGateway:
+    Type: "AWS::EC2::InternetGateway"
+
+  attachIgwVpc:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties:
+      InternetGatewayId: !Ref myInternetGateway
+      VpcId: !Ref OnPremVpc
+
+Outputs:
+  vpcId:
+    Description: The VPC ID
+    Value: !Ref vpc
+  privateSubnetAId:
+    Description: The ID of Subnet A
+    Value: !Ref privateSubnetA
+  privateSubnetAIp:
+    Description: The IP of Subnet A
+    Value: !Select [2, !Cidr [!Ref AWSIsolatedVPCCidrBlock, 6, 4]]
+  privateSubnetBId:
+    Description: The ID of Subnet B
+    Value: !Ref privateSubnetB
+  privateSubnetBIp:
+    Description: The IP of Subnet B
+    Value: !Select [3, !Cidr [!Ref AWSIsolatedVPCCidrBlock, 6, 4]]
+  DefaultSecurityGroup:
+    Description: The default subnet Id
+    Value: !GetAtt vpc.DefaultSecurityGroup
+  privateRouteTable:
+    Description: The private route table ID
+    Value: !Ref privateRouteTable

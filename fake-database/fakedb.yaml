@@ -68,7 +68,7 @@ Resources:
       InstanceType: t2.nano
       ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", 64]
       NetworkInterfaces:
-        - AssociatePublicIpAddress: "false"
+        - AssociatePublicIpAddress: "true"
           DeviceIndex: "0"
           GroupSet:
             - !Ref securityGroup
@@ -87,8 +87,13 @@ Resources:
             mysql -t < employees.sql
             mysql --execute "CREATE USER 'dbuser' IDENTIFIED BY 'password12345';"
             mysql --execute "GRANT USAGE ON *.* TO 'dbuser'@'%' IDENTIFIED BY 'password12345';"
-            mysql --executre "GRANT ALL privileges ON *.* TO 'dbuser'@'%';"
+            mysql --execute "GRANT ALL privileges ON *.* TO 'dbuser'@'%';"
             mysql --execute "FLUSH PRIVILEGES;"
       Tags:
        - Key: Name
          Value: Sample mysql DB
+
+Outputs:
+  DatabaseServerIP:
+    Description: Public IP address assigned to the database server
+    Value: !GetAtt fakedb.PublicIp

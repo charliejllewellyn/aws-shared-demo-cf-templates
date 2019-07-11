@@ -6,7 +6,7 @@ Parameters:
   ProjectName:
     Description: Name to tag resources with
     Type: String
-    Default: glue-demo
+    Default: fake-insecure-account-details
 
 Mappings:                              
   RegionMap:                           
@@ -61,22 +61,58 @@ Resources:
     Properties:
       AccessControl: PublicRead
 
-Resources:                                                                                         
   securityGroup:                                                                                   
     Type: AWS::EC2::SecurityGroup                                                                  
     Properties:                                                                                    
       GroupDescription: Allow SSH to VPN server                                                    
-      VpcId: !Ref vpcId                                                                            
+      VpcId: !GetAtt vpc.Outputs.vpcId                                                                            
       SecurityGroupIngress:                                                                        
       - IpProtocol: tcp                                                                            
         FromPort: '22'                                                                             
         ToPort: '22'                                                                               
         CidrIp: 0.0.0.0/0                                                                          
+
+  ec2Role:
+    Type: "AWS::IAM::Role"
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonGuardDutyFullAccess
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: fake-insecure-account-ec2-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Resource: '*'
+                Action:
+                - 'iam:PutRolePolicy'
+      Path: "/"
+      RoleName: fake-insecure-account-role
+
+  ec2Profile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      Path: "/"
+      Roles:
+        - !Ref ec2Role
+      InstanceProfileName: fake-insecure-account-ec2-profile
                                                                                                    
   insecureHost1:                                                                                          
     Type: "AWS::EC2::Instance"                                                                     
     Properties:                                                                                    
-      InstanceType: t2.nano                                                                        
+      InstanceType: t2.micro                                                                        
       ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", 64]                                      
       NetworkInterfaces:                                                                           
         - AssociatePublicIpAddress: "true"                                                         
@@ -86,15 +122,22 @@ Resources:
           SubnetId: !GetAtt vpc.Outputs.subnetBId
       UserData:                                                                                    
         "Fn::Base64":                                                                              
-          !Sub |                                                                                   
-            #!/bin/bash        
-            while true ; do                                                                    
-              curl -s http://com.minergate.pool/dkjdjkjdlsajdkljalsskajdksakjdksajkllalkdjsalkjdsalkjdlkasj  > /dev/null &
-              curl -s http://xdn-xmr.pool.minergate.com/dhdhjkhdjkhdjkhajkhdjskahhjkhjkahdsjkakjasdhkjahdjk  > /dev/null &                                                                                             
-              dig -f ./domains/queries.txt > /dev/null &
-              dig GuardDutyC2ActivityB.com any
+          !Sub 
+            - |                                                                                   
+              #!/bin/bash        
+              echo ${S3Bucket} > ~/bucket.txt
               sleep 5
-            done
+              mkdir ~/.aws
+              echo -e "[default]\nregion = eu-west-2" > ~/.aws/config
+              yum install -y jq
+              echo '209.85.202.94' > ~/securityThreatList.txt ; aws s3 cp ~/securityThreatList.txt s3://${BUCKET_NAME}/
+              aws guardduty create-threat-intel-set --activate --detector-id $(aws guardduty list-detectors |jq .DetectorIds[0] | sed 's/"//g') --format TXT --location https://s3-eu-west-1.amazonaws.com/${BUCKET_NAME}/securityThreatList.txt --name fake-insecure-account-demo
+              while true ; do                                                                    
+                  curl http://209.85.202.94
+                  sleep 5
+              done
+            - {BUCKET_NAME: !Ref S3Bucket} 
+      IamInstanceProfile: !Ref ec2Profile
       Tags:                                                                                        
        - Key: Name                                                                                 
          Value: Insecure-host-1
